@@ -1,9 +1,14 @@
 #define chchen_cxx
 #include "chchen.h"
+#include "print.h"
 #include <TH2.h>
+#include <TH1.h>
 #include <TStyle.h>
 #include <TCanvas.h>
 #include <string>
+#include <iostream>
+#include <cmath>
+#include "TPad.h"
 void chchen::Loop()
 {
 //   In a ROOT session, you can do:
@@ -35,26 +40,38 @@ void chchen::Loop()
   std::string subtitle[2]={"Layer","Disk"};
   TH1F* hcount_1d = new TH1F("hcount_1d","",5, 0.5,5.5);
   TH1F* htof = new TH1F("htof","",100,-0.5,0.5);
-  TH1F* ftof = new TH1F("ftof","",100,0.0,20.0);
+  TH1F* ftof = new TH1F("ftof","",200,0.0,20.0);
+  //TH1F* pz = new TH1F("pz","",100,0.0,5.0);
+  TH1F* ftofCal = new TH1F("ftofCal","",200,0.0,20.0);
   TH1F* h[2][15];
   TH1F* ht[2][15];
   TH1F* f[2][15];
+  //TH1F* z[2][15];
+  TH1F* fc[2][15];
   for(int k=0;k<2; k++){
     for(int i=0;i<15;i++){
       
-      h[k][i]=(TH1F*)hcount_1d->Clone(Form("h%d%02i",k,i));
+      h[k][i]=(TH1F*)hcount_1d->Clone(Form("h%d%02i",k,i+1));
       h[k][i]->SetXTitle("Number of crossings per particle");
       h[k][i]->SetTitle(Form("%s, %s %d",title[k].data(),
 			       subtitle[k].data(),i+1));
 
-      ht[k][i]=(TH1F*)htof->Clone(Form("ht%d%02i",k,i));
+      ht[k][i]=(TH1F*)htof->Clone(Form("ht%d%02i",k,i+1));
       ht[k][i]->SetXTitle("Difference of TOF from the first hit: ns");
       ht[k][i]->SetTitle(Form("%s, %s %d",title[k].data(),
 			       subtitle[k].data(),i+1));
 
-      f[k][i]=(TH1F*)ftof->Clone(Form("f%d%02i",k,i));
-      f[k][i]->SetXTitle("Tine of Flight Distrubution");
+      f[k][i]=(TH1F*)ftof->Clone(Form("f%d%02i",k,i+1));
+      f[k][i]->SetXTitle("Time of Flight Distrubution");
       f[k][i]->SetTitle(Form("%s, %s %d",title[k].data(),
+			       subtitle[k].data(),i+1));
+      //z[k][i]=(TH1F*)pz->Clone(Form("z%d%02i",k,i+1));
+      //z[k][i]->SetXTitle("pz distrubution");
+      //z[k][i]->SetTitle(Form("%s, %s %d",title[k].data(),subtitle[k].data(),i+1));
+
+      fc[k][i]=(TH1F*)ftofCal->Clone(Form("fc%d%02i",k,i+1));
+      fc[k][i]->SetXTitle("Calculated Time of Flight Distrubutionpz distrubution");
+      fc[k][i]->SetTitle(Form("%s, %s %d",title[k].data(),
 			       subtitle[k].data(),i+1));
 
     }
@@ -94,12 +111,44 @@ void chchen::Loop()
 	if(hitPID->at(i)!= +13)continue;
 	int hitLayerIndex = hitLayer->at(i)-1;
 	int hitDiskIndex = hitDisk->at(i)-1;
+        float calE = genParE ->at(0) ;
+        //float calE2 = genParE ->at(1) ;
+        //cout<<genParE->size();
+        //cout<<"calE="<<calE<<endl
+        //cout<<calE2;
+        //cin>>calE;
+        float calPt = genParPt ->at(0);
+        //cout<<"calPt="<<calPt<<endl;
+        float calPz = sqrt(calE*calE-calPt*calPt-0.01);
+        //cout<<"calPz="<<calPz<<endl;
+        float calVz = sqrt(( calPz* calPz)/(calPz* calPz+0.01));
+        float calVt = sqrt(( calPt* calPt)/(calPt* calPt+0.01));
+        //float calVt = 1;
+        //cout<<"calVt="<<calVt<<endl;       
+        float gloXY = sqrt(hitGlobalX->at(i)*hitGlobalX->at(i)+hitGlobalY->at(i)*hitGlobalY->at(i)) ;     
+        float BR = calPt*0.877; //=pt/qB
+        float angle =gloXY/BR/200;              
+        float arcsin =asin(angle);       
+        float calR =arcsin*BR*2;       
+        float timeT = (calR*1000000000)/calVt/299792458;
+        float timeZ =(abs(hitGlobalZ->at(i))*10000000)/calVz/299792458;
+        if (timeZ>timeT)timeT=timeZ;
+       
+       
+        //cout<<"gloXY="<<gloXY<<endl;  
+        //cout<<"angle="<<angle<<endl;
+        //cout<<"arcsin="<<arcsin<<endl;
+        //cout<<"calR="<<calR<<endl;
+        //cout<<"timeT="<<timeT<<endl;
+        //cin>>calE;
 	if(hitSubDec->at(i)==1)
 	  {
 	    countB[hitLayerIndex]++;
 	    if(countB[hitLayerIndex]==1){
 	      tofB[hitLayerIndex]= hitTof->at(i);
               f[0][hitLayerIndex]->Fill(tofB[hitLayerIndex]);
+              //z[0][hitLayerIndex]->Fill(calPz);
+              fc[0][hitLayerIndex]->Fill(timeT);
                   }
 	    else if(countB[hitLayerIndex]>1)
 	      ht[0][hitLayerIndex]->Fill(hitTof->at(i)-tofB[hitLayerIndex]);
@@ -109,8 +158,11 @@ void chchen::Loop()
 	    {
 	      countE[hitDiskIndex]++;
 	      if(countE[hitDiskIndex]==1){
+               
 		tofE[hitDiskIndex]= hitTof->at(i);
                 f[1][hitDiskIndex]->Fill(tofE[hitDiskIndex]);
+                //z[1][hitDiskIndex]->Fill(calPz);
+                fc[1][hitDiskIndex]->Fill(timeT);
                  }
 	      else if(countE[hitDiskIndex]>1)
 		ht[1][hitDiskIndex]->Fill(hitTof->at(i)-tofE[hitDiskIndex]);
@@ -147,4 +199,22 @@ void chchen::Loop()
    }
 
   outFile->Close();
+
+  
+  //output ps
+  
+  for(int i=0;i<2;i++){
+     for(int j=0; j<15;j++)
+       {
+	 /*   TCanvas* c1 = new TCanvas("c1"); 
+         f[i][j]->Draw();
+         gStyle->SetOptFit(1111);
+         c1->SaveAs(Form("time_%d%02i.jpg",i,j));
+         c1->~TCanvas();
+         */
+         //Print(f[i][j],Form("time_%d%02i.jpg",i,j));
+       }
+   }
+
+ 
 }
